@@ -1,0 +1,28 @@
+<!-- save as public/admin.html -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Admin Send</title></head>
+<body>
+  <h3>Admin — Send Notification</h3>
+  <input id="heading" placeholder="Heading" value="Special Offer!"/><br/>
+  <input id="content" placeholder="Content" value="Click to see the offer."/><br/>
+  <input id="url" placeholder="URL" value="https://example.com"/><br/>
+  <button id="send">Send to all subscribers</button>
+  <pre id="out"></pre>
+
+  <script>
+    document.getElementById('send').addEventListener('click', async () => {
+      const heading = document.getElementById('heading').value;
+      const content = document.getElementById('content').value;
+      const url = document.getElementById('url').value;
+      const res = await fetch('/admin/send', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ heading, content, url })
+      });
+      const data = await res.json();
+      document.getElementById('out').innerText = JSON.stringify(data, null, 2);
+    });
+  </script>
+</body>
+</html>
