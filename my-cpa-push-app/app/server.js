@@ -1,64 +1,51 @@
-// save as server.js
-const express = require('express');
-const bodyParser = require('body-parser');
-const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+const express = require("express");
+const fetch = require("node-fetch"); // যদি Node 18+ হয়, built-in fetch আছে
+const path = require("path");
 
 const app = express();
-app.use(express.static('public')); // serve the index.html above from public/
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Simple in-memory store (production: use DB)
-const subscribers = new Set();
+// Static files serve করবে (index.html, admin.html ইত্যাদি)
+app.use(express.static(path.join(__dirname, "public")));
 
-app.post('/save-subscriber', (req, res) => {
-  const { playerId } = req.body;
-  if (!playerId) return res.status(400).json({ error: 'playerId required' });
-  subscribers.add(playerId);
-  console.log('Subscriber added:', playerId);
-  res.json({ ok: true, count: subscribers.size });
+// Env variables (Render → Environment এ সেট করবে)
+const APP_ID = process.env.ONESIGNAL_APP_ID;
+const REST_KEY = process.env.ONESIGNAL_REST_API_KEY;
+
+// Test route
+app.get("/ping", (req, res) => {
+  res.send("Server is running ✅");
 });
 
-app.post('/remove-subscriber', (req, res) => {
-  const { playerId } = req.body;
-  subscribers.delete(playerId);
-  console.log('Subscriber removed:', playerId);
-  res.json({ ok: true, count: subscribers.size });
-});
-
-// Admin endpoint: send notification to all stored subscribers
-// NOTE: Protect this route with real auth in production.
-app.post('/admin/send', async (req, res) => {
-  const { heading = 'Hello', content = 'This is a test notification', url = 'https://example.com' } = req.body;
-  const include_player_ids = Array.from(subscribers);
-  if (include_player_ids.length === 0) {
-    return res.status(400).json({ error: 'No subscribers' });
-  }
-
-  const body = {
-    app_id: "d4bb5ed9-aede-4005-9385-cbda5eb5223b",      // <-- OneSignal app id
-    include_player_ids,
-    headings: { en: heading },
-    contents: { en: content },
-    url // clicking opens this url
-  };
-
+// Admin থেকে নোটিফিকেশন পাঠানোর জন্য endpoint
+app.post("/send", async (req, res) => {
   try {
-    const resp = await fetch('https://onesignal.com/api/v1/notifications', {
-      method: 'POST',
+    const message = req.body.message || "Hello from my CPA app!";
+
+    const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json;charset=utf-8',
-        'Authorization': 'syskoddrgem7n6chuujuxgi4d' // <-- REST API Key (keep secret!)
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${REST_KEY}`, // OneSignal REST API key
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        app_id: APP_ID,
+        included_segments: ["All"],
+        contents: { en: message }
+      })
     });
-    const data = await resp.json();
-    console.log('OneSignal response:', data);
-    res.json({ ok: true, data });
+
+    const data = await response.json();
+    res.json(data);
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to send' });
+    console.error("Error sending notification:", err);
+    res.status(500).json({ error: "Failed to send notification" });
   }
 });
 
+// Render / Railway এ PORT dynamic হবে
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=> console.log('Server running on port', PORT));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
