@@ -1,0 +1,92 @@
+<!-- save as public/index.html -->
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Subscribe for Notifications</title>
+  <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
+  <style>
+    body{font-family: Arial, sans-serif; padding:20px;}
+    .btn{padding:10px 16px;background:#2b6cb0;color:#fff;border:none;border-radius:6px;cursor:pointer;}
+    .muted{color:#666;margin-top:10px}
+  </style>
+</head>
+<body>
+  <h2>Notification Subscribe Page</h2>
+  <p>Subscribe করলে আমরা ব্রাউজারে সময়ে সময়ে নোটিফিকেশন পাঠাতে পারব।</p>
+
+  <button id="subscribeBtn" class="btn">Subscribe to notifications</button>
+  <button id="unsubscribeBtn" class="btn" style="display:none;background:#c53030">Unsubscribe</button>
+
+  <div id="info" class="muted"></div>
+
+  <script>
+    // configure OneSignal
+    window.OneSignal = window.OneSignal || [];
+    OneSignal.push(function() {
+      OneSignal.init({
+        appId: "d4bb5ed9-aede-4005-9385-cbda5eb5223b",          // <-- এখানে নিজের OneSignal app id বসাও
+        notifyButton: { enable: false },
+        allowLocalhostAsSecureOrigin: true      // dev এর জন্য, production-এ remove করে দিও
+      });
+    });
+
+    const info = document.getElementById('info');
+    const subscribeBtn = document.getElementById('subscribeBtn');
+    const unsubscribeBtn = document.getElementById('unsubscribeBtn');
+
+    async function updateStatus() {
+      OneSignal.push(async function() {
+        const isPushEnabled = await OneSignal.isPushNotificationsEnabled();
+        const userId = await OneSignal.getUserId();
+        info.innerText = `Push enabled: ${isPushEnabled} \nPlayer ID: ${userId || '—'}`;
+        subscribeBtn.style.display = isPushEnabled ? 'none' : 'inline-block';
+        unsubscribeBtn.style.display = isPushEnabled ? 'inline-block' : 'none';
+      });
+    }
+
+    subscribeBtn.addEventListener('click', function() {
+      OneSignal.push(function() {
+        OneSignal.showNativePrompt(); // browser prompt দেখাবে
+      });
+    });
+
+    unsubscribeBtn.addEventListener('click', function() {
+      OneSignal.push(async function() {
+        // unsubscribe locally
+        await OneSignal.setSubscription(false);
+        // optionally inform your server to remove player id
+        const playerId = await OneSignal.getUserId();
+        if (playerId) {
+          fetch('/remove-subscriber', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ playerId })
+          });
+        }
+        updateStatus();
+      });
+    });
+
+    // When user subscribes, send player id to our server
+    OneSignal.push(function() {
+      // listen for subscription change
+      OneSignal.on('subscriptionChange', async function(isSubscribed) {
+        const playerId = await OneSignal.getUserId();
+        if (isSubscribed && playerId) {
+          // send to server for storage
+          fetch('/save-subscriber', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ playerId })
+          }).catch((err)=>console.error('save-subscriber error', err));
+        }
+        updateStatus();
+      });
+      // initial status
+      updateStatus();
+    });
+  </script>
+</body>
+</html>
